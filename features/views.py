@@ -2,14 +2,7 @@ from django.http import JsonResponse
 from django.core.exceptions import ObjectDoesNotExist
 from .models import LostItem, FoundItem
 import json
-
-import json
-from django.http import JsonResponse
-from .models import LostItem, FoundItem
-
-import json
-from django.http import JsonResponse
-from .models import LostItem, FoundItem
+from django.contrib.auth.models import User
 
 def lost_items(request):
     if request.method == "POST":
@@ -80,7 +73,7 @@ def found_items(request):
     elif request.method == "GET":
         items = FoundItem.objects.select_related("found_by").values(
             "id", "name", "description", "location", "date_found", "claimed",
-            "found_by__first_name", "found_by__last_name"
+            "found_by__first_name", "found_by__last_name","image"
         )
 
         formatted_items = [
@@ -91,7 +84,8 @@ def found_items(request):
                 "description": item["description"],
                 "location": item["location"],
                 "date_found": item["date_found"],
-                "claimed": item["claimed"]
+                "claimed": item["claimed"],
+                "image": item['image']
             }
             for item in items
         ]
@@ -140,3 +134,65 @@ def delete_found_item(request, id):
         except ObjectDoesNotExist:
             return JsonResponse({"error": "Found item not found"}, status=404)
     return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+
+############# OPTIONAL FEATURES #################################
+
+
+def claim_found_item(request, item_id):
+    if request.method == "POST":
+        try:
+            item = FoundItem.objects.get(id=item_id)
+            if item.claimed:
+                return JsonResponse({"error": "Item already claimed"}, status=400)
+
+            item.claimed = True
+            item.save()
+            return JsonResponse({"message": "Item successfully claimed"}, status=200)
+        except FoundItem.DoesNotExist:
+            return JsonResponse({"error": "Item not found"}, status=404)
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+def nearby_lost_items(request):
+    location = request.GET.get("location")
+    if not location:
+        return JsonResponse({"error": "Location parameter is required"}, status=400)
+
+    items = LostItem.objects.filter(location__icontains=location).values(
+        "id", "name", "description", "location", "date_lost", "is_found"
+    )
+    return JsonResponse({"lost_items": list(items)}, status=200)
+
+
+
+def upload_found_item_image(request):
+    if request.method == "POST" and request.FILES.get("image") and request.POST.get("item_id"):
+        item_id = request.POST["item_id"]
+        try:
+            item = FoundItem.objects.get(id=item_id)
+            image = request.FILES["image"]
+            item.image = image
+            item.save()
+            return JsonResponse({"message": "Image uploaded successfully", "image_url": item.image.url}, status=201)
+        except FoundItem.DoesNotExist:
+            return JsonResponse({"error": "Item not found"}, status=404)
+
+    return JsonResponse({"error": "Invalid request or missing file"}, status=400)
+
+
+def user_lost_items_history(request):
+    user_id = request.GET.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "User ID parameter is required"}, status=400)
+
+    try:
+        user = User.objects.get(id=user_id)
+        items = LostItem.objects.filter(lost_by=user).values(
+            "id", "name", "description", "location", "date_lost", "is_found"
+        )
+        return JsonResponse({"lost_items": list(items)}, status=200)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)

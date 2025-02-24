@@ -3,10 +3,6 @@ from django.http import JsonResponse
 from django.contrib.auth.models import User
 import json
 
-from django.contrib.auth.models import User
-from django.http import JsonResponse
-import json
-
 def user_register(request):
     if request.method != "POST":
         return JsonResponse({"error": "Method Not Allowed"}, status=405)
